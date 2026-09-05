@@ -1,5 +1,5 @@
 -- ============================================
--- RAYFIELD: CONSOLE.LOG + AUTO PARRY
+-- RAYFIELD SIRIUS: CONSOLE.LOG + AUTO PARRY
 -- Remote asli: ReplicatedStorage.Remotes.ParryButtonPress
 -- ============================================
 
@@ -7,41 +7,53 @@ local player = game.Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 
--- ========== 1. CONSOLE.LOG MODULE ==========
-local ConsoleLogs = {}
-local MAX_LOGS = 100
+-- ========== 1. CONSOLE.LOG MODULE (Sirius-style) ==========
+local Logs = {}
+local MAX_LOGS = 200
 local ConsoleParagraph = nil
+local updating = false
 
 local function RefreshConsole()
     if not ConsoleParagraph then return end
     pcall(function()
         ConsoleParagraph:Set({
             Title = "Live Console",
-            Content = #ConsoleLogs > 0
-                and table.concat(ConsoleLogs, "\n")
+            Content = #Logs > 0
+                and table.concat(Logs, "\n")
                 or "Console kosong."
         })
     end)
 end
 
 function ConsoleLog(message)
-    message = tostring(message)
-    table.insert(ConsoleLogs, message)
-    if #ConsoleLogs > MAX_LOGS then
-        table.remove(ConsoleLogs, 1)
+    if updating then return end
+    updating = true
+
+    local text = string.format(
+        "[%s] %s",
+        os.date("%H:%M:%S"),
+        tostring(message)
+    )
+
+    table.insert(Logs, text)
+
+    if #Logs > MAX_LOGS then
+        table.remove(Logs, 1)
     end
+
     RefreshConsole()
-    print(message)
+    updating = false
+    print(message) -- backup output
 end
 
 local function ClearConsole()
-    table.clear(ConsoleLogs)
+    table.clear(Logs)
     RefreshConsole()
     ConsoleLog("[SYSTEM] Console cleared")
 end
 
 local function CopyConsole()
-    local text = table.concat(ConsoleLogs, "\n")
+    local text = table.concat(Logs, "\n")
     if setclipboard then
         setclipboard(text)
         ConsoleLog("[SYSTEM] Log berjaya disalin.")
@@ -50,10 +62,23 @@ local function CopyConsole()
     end
 end
 
--- ========== 2. ERROR LOGGER ==========
+-- ========== 2. ERROR LOGGER (Sirius-style) ==========
 pcall(function()
-    game:GetService("ScriptContext").Error:Connect(function(message)
+    game:GetService("ScriptContext").Error:Connect(function(message, trace)
         ConsoleLog("[ERROR] " .. tostring(message))
+        if trace and trace ~= "" then
+            ConsoleLog("[TRACE] " .. tostring(trace))
+        end
+    end)
+end)
+
+pcall(function()
+    game:GetService("LogService").MessageOut:Connect(function(message, messageType)
+        if messageType == Enum.MessageType.MessageError then
+            ConsoleLog("[ERROR] " .. tostring(message))
+        elseif messageType == Enum.MessageType.MessageWarning then
+            ConsoleLog("[WARN] " .. tostring(message))
+        end
     end)
 end)
 
@@ -66,7 +91,6 @@ local lastParryTime = 0
 local PARRY_COOLDOWN = 0.2
 
 local function getParryRemote()
-    -- REMOTE ASLI BLADE BALL
     local success, remote = pcall(function()
         return game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("ParryButtonPress")
     end)
@@ -120,7 +144,6 @@ local function startAutoParry()
     end
     autoParryActive = true
 
-    -- Cari remote asli
     if not parryRemote then
         parryRemote = getParryRemote()
     end
@@ -131,7 +154,6 @@ local function startAutoParry()
         return
     end
 
-    -- Cari bola
     if not ball or not ball.Parent then
         ball = findBall()
     end
@@ -160,7 +182,6 @@ local function startAutoParry()
         if dist < 30 and speed > 15 and (tick() - lastParryTime) >= PARRY_COOLDOWN then
             lastParryTime = tick()
             
-            -- GUNA REMOTE ASLI
             local success = pcall(function()
                 parryRemote:FireServer()
             end)
@@ -191,22 +212,16 @@ local function stopAutoParry()
     ConsoleLog("[AUTO PARRY] DINONAKTIFKAN, tuan.")
 end
 
--- ========== 4. RAYFIELD UI ==========
-local Rayfield = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/jensonhirst/Rayfield/main/source"
-))()
+-- ========== 4. RAYFIELD SIRIUS UI ==========
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
 local Window = Rayfield:CreateWindow({
-    Name = "Console.log",
-    LoadingTitle = "Console.log",
+    Name = "Nexa Console + Auto Parry",
+    LoadingTitle = "Nexa Console",
     LoadingSubtitle = "Blade Ball",
     ConfigurationSaving = {
         Enabled = false
-    },
-    Discord = {
-        Enabled = false
-    },
-    KeySystem = false
+    }
 })
 
 -- ========== CONSOLE TAB ==========
@@ -214,20 +229,20 @@ local ConsoleTab = Window:CreateTab("Console")
 
 ConsoleParagraph = ConsoleTab:CreateParagraph({
     Title = "Live Console",
-    Content = "Console initialized..."
+    Content = "Console sedang dimulakan..."
 })
 
 ConsoleTab:CreateButton({
-    Name = "Clear",
+    Name = "📋 Copy Logs",
     Callback = function()
-        ClearConsole()
+        CopyConsole()
     end
 })
 
 ConsoleTab:CreateButton({
-    Name = "Copy",
+    Name = "🗑️ Clear Logs",
     Callback = function()
-        CopyConsole()
+        ClearConsole()
     end
 })
 
@@ -249,25 +264,31 @@ MainTab:CreateToggle({
     end
 })
 
--- ========== 5. DEBUG TAB ==========
+-- ========== DEBUG TAB ==========
 local DebugTab = Window:CreateTab("Debug")
 
 DebugTab:CreateButton({
-    Name = "Test Remote Asli",
+    Name = "Test Remote",
     Callback = function()
         local remote = getParryRemote()
         if remote then
             local success = pcall(function()
                 remote:FireServer()
             end)
-            ConsoleLog(success and "[DEBUG] Remote asli BERFUNGSI" or "[DEBUG] Remote asli GAGAL")
+            ConsoleLog(success and "[DEBUG] Remote BERFUNGSI" or "[DEBUG] Remote GAGAL")
         end
     end
 })
 
--- ========== 6. EKSEKUSI AWAL ==========
+DebugTab:CreateButton({
+    Name = "Scan Ball",
+    Callback = function()
+        findBall()
+    end
+})
+
+-- ========== 5. EKSEKUSI AWAL ==========
 ConsoleLog("[SYSTEM] =============================")
-ConsoleLog("[SYSTEM] Console.log UI aktif")
-ConsoleLog("[SYSTEM] Auto Parry UI aktif")
-ConsoleLog("[SYSTEM] Remote ASLI: ReplicatedStorage.Remotes.ParryButtonPress")
+ConsoleLog("[SYSTEM] Rayfield Sirius + Auto Parry aktif")
+ConsoleLog("[SYSTEM] Remote: ReplicatedStorage.Remotes.ParryButtonPress")
 ConsoleLog("[SYSTEM] =============================")
